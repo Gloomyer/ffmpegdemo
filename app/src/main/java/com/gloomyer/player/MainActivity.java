@@ -33,7 +33,7 @@ public class MainActivity extends AppCompatActivity {
     public void play(View view) {
         File dir = Environment.getExternalStorageDirectory();
         dir = new File(dir, "Movies");
-        String input = new File(dir, "wtx.mkv").getAbsolutePath();
+        String input = new File(dir, "xzcs.mp4").getAbsolutePath();
         VideoPalyer.play(input, mVideoView.getHolder().getSurface());
     }
 }
