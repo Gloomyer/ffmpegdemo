@@ -12,7 +12,7 @@ JNIEXPORT void JNICALL
 Java_com_gloomyer_player_player_VideoPalyer_play(JNIEnv *env, jclass type, jstring path_,
                                                  jobject surface) {
     const char *path = env->GetStringUTFChars(path_, 0);
-    auto *pInfo = new PlayerInfo;
+    PlayerInfo *pInfo = new PlayerInfo;
     env->GetJavaVM(&pInfo->jvm);
 
     //初始化视频上下文
@@ -25,13 +25,12 @@ Java_com_gloomyer_player_player_VideoPalyer_play(JNIEnv *env, jclass type, jstri
 
     initVideoSurface(env, pInfo, surface);
     initAudioTrack(env, pInfo);
-    pthread_create(&pInfo->decode_thread, 0, decode_proc, pInfo);
-
-    //pthread_create(&pInfo->decode_thread, nullptr, decode_audio_proc, pInfo);
+    pthread_create(&pInfo->decode_video_thread, 0, decode_proc_video, pInfo);
+    pthread_create(&pInfo->decode_audio_thread, 0, decode_proc_audio, pInfo);
 
     //等待线程结束
-    pthread_join(pInfo->decode_thread, 0);
-    //pthread_join(pInfo->audio_decode_thread, nullptr);
+    pthread_join(pInfo->decode_video_thread, 0);
+    pthread_join(pInfo->decode_audio_thread, 0);
 
     release(env, pInfo);
 
@@ -39,12 +38,12 @@ Java_com_gloomyer_player_player_VideoPalyer_play(JNIEnv *env, jclass type, jstri
 }
 
 void initVideoSurface(JNIEnv *env, PlayerInfo *pInfo, jobject surface) {
-    LOGE("%s", initVideoSurface);
+    LOGE("%s", "initVideoSurface");
     pInfo->native_window = ANativeWindow_fromSurface(env, surface);
 }
 
 void initAudioTrack(JNIEnv *env, PlayerInfo *pInfo) {
-    LOGE("%s", initAudioTrack);
+    LOGE("%s", "initAudioTrack");
     AVCodecContext *audio_codec_ctx = pInfo->audio_codec_ctx;
 
     pInfo->swr_ctx = swr_alloc();

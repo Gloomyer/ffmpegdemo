@@ -16,7 +16,9 @@ void release(JNIEnv *env, PlayerInfo *pInfo);
 
 bool init_codec_ctx(PlayerInfo *pInfo, int stream_index, CODEC_TYPE type);
 
-void *decode_proc(void *args);
+void *decode_proc_video(void *args);
+
+void *decode_proc_audio(void *args);
 
 void decode_video_proc(PlayerInfo *pInfo, AVPacket *packet, AVFrame *yuv_frame,
                        AVFrame *rgb_frame, ANativeWindow_Buffer video_buffer);

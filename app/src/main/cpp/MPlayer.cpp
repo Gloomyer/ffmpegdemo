@@ -28,12 +28,12 @@ bool init_input_format_ctx(PlayerInfo *pInfo, const char *path) {
     for (; i < pFormatCtx->nb_streams; i++) {
         //根据类型判断，是否是视频流
         if (video_stream_idx == -1 &&
-            pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+            pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_stream_idx = i;
         }
 
         if (audio_stream_idx == -1 &&
-            pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+            pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             audio_stream_idx = i;
         }
 
@@ -62,8 +62,9 @@ bool init_codec_ctx(PlayerInfo *pInfo, int stream_index, CODEC_TYPE type) {
     AVFormatContext *format_ctx = pInfo->input_codec_ctx;
 
     //获取视频解码器
-    AVCodecContext *pCodeCtx = format_ctx->streams[stream_index]->codec;
-    AVCodec *pCodec = avcodec_find_decoder(pCodeCtx->codec_id);
+    AVCodecContext *pCodecCtx = avcodec_alloc_context3(NULL);
+    avcodec_parameters_to_context(pCodecCtx, format_ctx->streams[stream_index]->codecpar);
+    AVCodec *pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
 
     if (pCodec == 0) {
         LOGE("not find %d codec", stream_index);
@@ -71,23 +72,23 @@ bool init_codec_ctx(PlayerInfo *pInfo, int stream_index, CODEC_TYPE type) {
     }
 
     //5.打开解码器
-    if (avcodec_open2(pCodeCtx, pCodec, 0) < 0) {
+    if (avcodec_open2(pCodecCtx, pCodec, 0) < 0) {
         LOGE("not find %d codec", stream_index);
         return false;
     }
 
     if (type == CODEC_VIDEO) {
-        pInfo->video_codec_ctx = pCodeCtx;
+        pInfo->video_codec_ctx = pCodecCtx;
         pInfo->video_codec = pCodec;
     } else if (type == CODEC_AUDIO) {
-        pInfo->audio_codec_ctx = pCodeCtx;
+        pInfo->audio_codec_ctx = pCodecCtx;
         pInfo->audio_codec = pCodec;
     }
 
     return true;
 }
 
-void *decode_proc(void *args) {
+void *decode_proc_video(void *args) {
     PlayerInfo *pInfo = (PlayerInfo *) args;
 
     JNIEnv *env;
@@ -98,24 +99,45 @@ void *decode_proc(void *args) {
     AVPacket *packet = (AVPacket *) av_malloc(sizeof(AVPacket));
 
     ANativeWindow_Buffer video_buffer;
-    uint8_t *audio_buffer = (uint8_t *) av_malloc(MAX_AUDIO_FRAME_SIZE);
 
     AVFrame *yuv_frame = av_frame_alloc();
     AVFrame *rgb_frame = av_frame_alloc();
-    AVFrame *audio_frame = av_frame_alloc();
 
     while (av_read_frame(format_ctx, packet) >= 0) {
         if (packet->stream_index == pInfo->video_stream_index) {
             decode_video_proc(pInfo, packet, yuv_frame, rgb_frame, video_buffer);
-        } else if (packet->stream_index == pInfo->audio_stream_index) {
+        }
+    }
+
+    av_packet_unref(packet);
+    av_frame_free(&yuv_frame);
+    av_frame_free(&rgb_frame);
+    pInfo->jvm->DetachCurrentThread();
+    pthread_exit(0);
+}
+
+void *decode_proc_audio(void *args) {
+    PlayerInfo *pInfo = (PlayerInfo *) args;
+
+    JNIEnv *env;
+    pInfo->jvm->AttachCurrentThread(&env, 0);
+
+    AVFormatContext *format_ctx = pInfo->input_codec_ctx;
+
+    AVPacket *packet = (AVPacket *) av_malloc(sizeof(AVPacket));
+
+    uint8_t *audio_buffer = (uint8_t *) av_malloc(MAX_AUDIO_FRAME_SIZE);
+
+    AVFrame *audio_frame = av_frame_alloc();
+
+    while (av_read_frame(format_ctx, packet) >= 0) {
+        if (packet->stream_index == pInfo->audio_stream_index) {
             decode_audio_proc(env, pInfo, packet, audio_frame, audio_buffer);
         }
     }
 
     av_packet_unref(packet);
     av_frame_free(&audio_frame);
-    av_frame_free(&yuv_frame);
-    av_frame_free(&rgb_frame);
     pInfo->jvm->DetachCurrentThread();
     pthread_exit(0);
 }
@@ -146,9 +168,7 @@ void decode_video_proc(PlayerInfo *pInfo, AVPacket *packet, AVFrame *yuv_frame,
                            rgb_frame->data[0], rgb_frame->linesize[0],
                            codec_ctx->width, codec_ctx->height);
 
-        //unlock
         ANativeWindow_unlockAndPost(native_window);
-        //usleep(1000 * 16);
     }
 }
 

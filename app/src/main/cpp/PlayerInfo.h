@@ -17,7 +17,8 @@ public:
     AVCodec *video_codec;
     AVCodec *audio_codec;
 
-    pthread_t decode_thread;
+    pthread_t decode_video_thread;
+    pthread_t decode_audio_thread;
 
     ANativeWindow *native_window;
 
